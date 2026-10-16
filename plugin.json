@@ -1,0 +1,81 @@
+{
+  "id": "id.aiii.jev",
+  "version": "0.1.2",
+  "aiios_min_version": "0.1.10",
+  "plugin_family": "tool_bridge",
+  "publisher": "AI Identity Incorporated",
+  "title": "Generic Jev",
+  "description": "Ask focused Jev questions about supplied evidence and receive full typed answers for your own reasoning.",
+  "license": "Apache-2.0",
+  "interface": {
+    "id": "id.aiii.jev.core",
+    "version": 1
+  },
+  "capability_envelope": [
+    "net.outbound:api.typesafe.ai:443"
+  ],
+  "variants": [
+    {
+      "variant_id": "linux-x86_64-wasm",
+      "platform": "linux",
+      "arch": "x86_64",
+      "topology": "full_identity_host",
+      "execution_runtime": "wasm_component",
+      "admission_profile": "wasm_sandbox",
+      "variant_capabilities": [
+        "net.outbound:api.typesafe.ai:443"
+      ]
+    },
+    {
+      "variant_id": "linux-arm64-wasm",
+      "platform": "linux",
+      "arch": "arm64",
+      "topology": "full_identity_host",
+      "execution_runtime": "wasm_component",
+      "admission_profile": "wasm_sandbox",
+      "variant_capabilities": [
+        "net.outbound:api.typesafe.ai:443"
+      ]
+    },
+    {
+      "variant_id": "macos-arm64-wasm",
+      "platform": "macos",
+      "arch": "arm64",
+      "topology": "full_identity_host",
+      "execution_runtime": "wasm_component",
+      "admission_profile": "wasm_sandbox",
+      "variant_capabilities": [
+        "net.outbound:api.typesafe.ai:443"
+      ]
+    },
+    {
+      "variant_id": "windows-x86_64-wasm",
+      "platform": "windows",
+      "arch": "x86_64",
+      "topology": "full_identity_host",
+      "execution_runtime": "wasm_component",
+      "admission_profile": "wasm_sandbox",
+      "variant_capabilities": [
+        "net.outbound:api.typesafe.ai:443"
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "api_key",
+      "type": "secret",
+      "title": "Jev API key",
+      "description": "Kept by AII OS and sent only to api.typesafe.ai",
+      "required": true
+    },
+    {
+      "key": "model",
+      "type": "string",
+      "title": "Jev model",
+      "description": "Select a model or enter a versioned model ID to pin an evaluation",
+      "default": "jev-latest",
+      "choices_from": "models"
+    }
+  ],
+  "homepage": "https://github.com/aiii-dot-id/aiios-jev-plugin"
+}
