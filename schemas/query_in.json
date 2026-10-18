@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "required": [
+    "state",
+    "questions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "state": {
+      "type": [
+        "string",
+        "object",
+        "array"
+      ],
+      "description": "Relevant evidence to send to TypeSafe; do not include credentials or unrelated context."
+    },
+    "questions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": true,
+      "description": "Named Jev questions. Each value has type (noul, choice, score), instructions (string/object/array), and criteria: choice = option-to-description map (1–255, null descriptions allowed); score = 2–10 ordered descriptions; noul = optional true/false descriptions. One explicit judgment per question. The handler validates every question.",
+      "examples": [
+        {
+          "supported": {
+            "type": "noul",
+            "instructions": "Does the supplied evidence support the claim?"
+          }
+        },
+        {
+          "route": {
+            "type": "choice",
+            "instructions": "Which next step fits the evidence?",
+            "criteria": {
+              "inspect": "Evidence needs inspection",
+              "test": "A test is needed",
+              "insufficient_evidence": "No supported next step"
+            }
+          }
+        },
+        {
+          "coverage": {
+            "type": "score",
+            "instructions": "How thoroughly do the supplied tests cover the requirement?",
+            "criteria": [
+              "No relevant coverage",
+              "Partial coverage",
+              "Complete coverage"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

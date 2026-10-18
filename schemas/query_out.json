@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": [
+    "model",
+    "answers",
+    "usage"
+  ],
+  "properties": {
+    "model": {
+      "type": "string"
+    },
+    "answers": {
+      "type": "object"
+    },
+    "usage": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,32 @@
+package conversation
+
+import (
+	"github.com/aiii-dot-id/aii-os/internal/llm"
+	"github.com/aiii-dot-id/aii-os/internal/untrusted"
+	"strings"
+	"testing"
+)
+
+func TestGenericJevDeliveryBound(t *testing.T) {
+
+	prefix, suffix := `{"answers":{},"padding":"`, `"}`
+	raw := prefix + strings.Repeat("x", (16<<10)-len(prefix)-len(suffix)) + suffix
+	full := untrusted.Wrap("plugin id.aiii.jev", raw)
+	for _, limit := range []int{20000, 32000} {
+		client := &scriptLLM{script: []llm.Response{resp("", toolCall("j1", "pl_id_aiii_jev_query", `{}`)), textResp("done")}}
+		tr := &fakeTranscript{limit: 20000}
+		loop := New(client, &fakeTools{results: map[string]string{"pl_id_aiii_jev_query": full}}, &fakeDefs{}, tr, nil, Config{MaxToolResultChars: limit})
+		if _, err := loop.Run(t.Context(), "system", []llm.Message{{Role: "user", Content: "evaluate"}}); err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, m := range client.requests[1] {
+			if m.Content == full {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("full Jev result not delivered at %d", limit)
+		}
+	}
+}

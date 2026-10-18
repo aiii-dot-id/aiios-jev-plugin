@@ -1,0 +1,17 @@
+{
+  "name": "bad-type",
+  "operation": "query",
+  "arguments": {
+    "state": "x",
+    "questions": {
+      "q": {
+        "type": "chat",
+        "instructions": "write"
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "reason_code": "OPERATION_ARGUMENT_INVALID"
+  }
+}

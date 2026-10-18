@@ -1,0 +1,18 @@
+{
+  "name": "unconfigured",
+  "operation": "query",
+  "arguments": {
+    "state": "x",
+    "questions": {
+      "q": {
+        "type": "noul",
+        "instructions": "Is x present?"
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "reason_code": "JEV_UNCONFIGURED"
+  },
+  "unconfirmed_by_design": "A query evaluates explicitly supplied evidence using the already-granted Jev service; the identity may ask without a separate operator confirmation for each judgment."
+}
