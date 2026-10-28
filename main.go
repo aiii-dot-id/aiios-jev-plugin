@@ -5,20 +5,31 @@ import (
 	"errors"
 	"fmt"
 	sdk "github.com/aiii-dot-id/aii-plugin-sdk/pkg/aiiosdk"
+	"net/url"
 	"strings"
 )
 
 const (
-	pluginID     = "id.aiii.jev"
+	pluginID = "id.aiii.jev"
+
 	jevHost      = "net.outbound:api.typesafe.ai:443"
-	jevURL       = "https://api.typesafe.ai/v1/systemone"
-	modelsURL    = "https://api.typesafe.ai/v1/models"
+	netLocal     = "net.local"
+	jevBase      = "https://api.typesafe.ai"
+	systemOne    = "/v1/systemone"
+	modelsPath   = "/v1/models"
 	defaultModel = "jev-latest"
+	backendJev   = "jev"
+	backendLocal = "local"
 
 	maxRequestBytes = 256 << 10
 
-	maxResultBytes   = 16 << 10
-	requestTimeoutMS = 10000
+	defaultReplyBytes = 16 << 10
+	minReplyBytes     = 1 << 10
+	maxReplyBytes     = 64 << 10
+
+	defaultTimeoutMS = 10000
+	minTimeoutMS     = 1000
+	maxTimeoutMS     = 85000
 	maxChoices       = 255
 	maxLevels        = 10
 	maxModels        = 256
@@ -27,34 +38,100 @@ const (
 func init() {
 	p := sdk.New(pluginID)
 	p.Describe("query", sdk.Descriptor{
-		Summary: "Ask Jev focused questions about supplied evidence: noul for probability of yes, choice for alternatives, score for descriptive levels. Write one judgment per question; supply relevant context and explicit criteria, including insufficient evidence when appropriate. Answers are evidence for your reasoning; confidence is not a guarantee. Split the query if its reply is too large. State and questions are sent to TypeSafe.",
+		Summary: querySummary,
 		Input:   "schemas/query_in.json", Output: "schemas/query_out.json", Effects: sdk.EffectsWriteExternal,
-		Capabilities: []string{jevHost}, MaxResultBytes: maxResultBytes, Family: "jev",
+		Capabilities: []string{jevHost, netLocal}, MaxResultBytes: maxReplyBytes, Family: "jev",
 		Keywords: []string{"jev", "judgment", "classify", "evaluate", "score", "decision"},
 		Examples: []string{`{"state":{"evidence":"Unit tests passed; integration tests were not run."},"questions":{"covered":{"type":"noul","instructions":"Does evidence say integration tests were run?"}}}`},
 	})
 	p.Handle("query", query)
-	p.Describe("models", sdk.Descriptor{Summary: "List Jev model choices for the model setting", Input: "schemas/models_in.json", Output: "schemas/models_out.json", Effects: sdk.EffectsReadExternal, Capabilities: []string{jevHost}, MaxResultBytes: maxResultBytes, Family: "jev", Keywords: []string{"jev", "models"}})
+	p.Describe("models", sdk.Descriptor{Summary: modelsSummary, Input: "schemas/models_in.json", Output: "schemas/models_out.json", Effects: sdk.EffectsReadExternal, Capabilities: []string{jevHost, netLocal}, MaxResultBytes: maxReplyBytes, Family: "jev", Keywords: []string{"jev", "models"}})
 	p.Handle("models", models)
 	p.Run()
 }
 func main() { sdk.MainDescribe() }
 
-func settings() (string, string, error) {
+type settingsReader interface {
+	String(key string) (string, bool)
+	Handle(key string) (string, bool)
+	Int(key string) (int64, bool)
+}
+
+type config struct {
+	backend, model          string
+	systemOne, models, auth string
+	timeoutMS, replyBytes   int
+}
+
+func settings() (config, error) {
 	v, err := sdk.Settings.Load()
 	if err != nil {
-		return "", "", hostError(err)
+		return config{}, hostError(err, sdk.HTTPResult{})
+	}
+	return configFrom(v)
+}
+
+func configFrom(v settingsReader) (config, error) {
+	c := config{backend: backendJev, model: defaultModel, timeoutMS: defaultTimeoutMS, replyBytes: defaultReplyBytes}
+	if b, ok := v.String("backend"); ok && b != "" {
+		if b != backendJev && b != backendLocal {
+			return c, sdk.Fail("JEV_CONFIGURATION_INVALID", fmt.Sprintf(configurationInvalid, "backend", "is neither jev nor local"))
+		}
+		c.backend = b
+	}
+	if m, ok := v.String("model"); ok && m != "" {
+		c.model = m
+	}
+	for _, b := range []struct {
+		key      string
+		dst      *int
+		min, max int64
+	}{{"timeout_ms", &c.timeoutMS, minTimeoutMS, maxTimeoutMS}, {"max_reply_bytes", &c.replyBytes, minReplyBytes, maxReplyBytes}} {
+		if n, ok := v.Int(b.key); ok {
+			if n < b.min || n > b.max {
+				return c, sdk.Fail("JEV_CONFIGURATION_INVALID", fmt.Sprintf(configurationInvalid, b.key, fmt.Sprintf("is %d, outside %d to %d", n, b.min, b.max)))
+			}
+			*b.dst = int(n)
+		}
+	}
+	if c.backend == backendLocal {
+		raw, _ := v.String("local_url")
+		if strings.TrimSpace(raw) == "" {
+			return c, sdk.Fail("JEV_UNCONFIGURED", unconfiguredLocal)
+		}
+		base, why := localBase(raw)
+		if why != "" {
+			return c, sdk.Fail("JEV_CONFIGURATION_INVALID", fmt.Sprintf(configurationInvalid, "local_url", why))
+		}
+		c.systemOne, c.models = base+systemOne, base+modelsPath
+		return c, nil
 	}
 	handle, _ := v.Handle("api_key")
 	if handle == "" {
-		return "", "", sdk.Fail("JEV_UNCONFIGURED", "Set the Jev API key on the plugin card")
+		return c, sdk.Fail("JEV_UNCONFIGURED", unconfiguredJev)
 	}
-	model, _ := v.String("model")
-	if model == "" {
-		model = defaultModel
-	}
-	return handle, model, nil
+	c.systemOne, c.models, c.auth = jevBase+systemOne, jevBase+modelsPath, handle
+	return c, nil
 }
+
+func localBase(raw string) (base, why string) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	switch {
+	case err != nil:
+		return "", "is not an address"
+	case u.Scheme != "http" && u.Scheme != "https":
+		return "", "must begin http:// or https://"
+	case u.Host == "" || u.Hostname() == "":
+		return "", "names no host"
+	case u.User != nil:
+		return "", "must not carry a user or password"
+	case u.RawQuery != "" || u.Fragment != "" || u.ForceQuery:
+		return "", "must not carry a query or fragment"
+	}
+	p := strings.TrimSuffix(strings.TrimRight(u.Path, "/"), systemOne)
+	return u.Scheme + "://" + u.Host + p, ""
+}
+
 func modelName(s string) bool {
 	if len(s) == 0 || len(s) > 128 {
 		return false
@@ -66,7 +143,8 @@ func modelName(s string) bool {
 	}
 	return true
 }
-func hostError(err error) error {
+
+func hostError(err error, res sdk.HTTPResult) error {
 	if d, ok := sdk.AsDenied(err); ok {
 		return sdk.Deny(d.ReasonCode, d.Message)
 	}
@@ -74,27 +152,35 @@ func hostError(err error) error {
 	if errors.As(err, &op) {
 		return err
 	}
-	return sdk.Fail("JEV_TRANSPORT_FAILED", "The host could not complete the Jev operation; no retry was made")
+	return transportFailure(res)
 }
+
+func transportFailure(res sdk.HTTPResult) error {
+	if res.Effect == "not-performed" {
+		return sdk.Fail("JEV_TRANSPORT_NOT_SENT", notSent)
+	}
+	return sdk.Fail("JEV_TRANSPORT_UNKNOWN", outcomeUnknown)
+}
+
 func query(c sdk.Call) (any, error) {
 	q, err := validateQuery(c.Args())
 	if err != nil {
 		return nil, err
 	}
-	handle, model, err := settings()
+	cfg, err := settings()
 	if err != nil {
 		return nil, err
 	}
-	if !modelName(model) {
+	if !modelName(cfg.model) {
 		return nil, sdk.Fail("JEV_CONFIGURATION_INVALID", "model must be a nonblank ASCII model name, at most 128 bytes")
 	}
 
-	body := `{"model":"` + model + `","state":` + string(c.Args().Raw("state")) + `,"questions":` + string(c.Args().Raw("questions")) + `}`
+	body := `{"model":"` + cfg.model + `","state":` + string(c.Args().Raw("state")) + `,"questions":` + string(c.Args().Raw("questions")) + `}`
 	if len(body) > maxRequestBytes {
 		return nil, sdk.Fail("OPERATION_ARGUMENT_INVALID", "Request exceeds 256 KiB; pass less context or fewer questions")
 	}
-	res, err := sdk.HTTP.Post(jevURL, &sdk.HTTPOptions{Body: body, ContentType: "application/json", AuthProfile: handle, TimeoutMS: requestTimeoutMS})
-	raw, err := response(res, err)
+	res, err := sdk.HTTP.Post(cfg.systemOne, &sdk.HTTPOptions{Body: body, ContentType: "application/json", AuthProfile: cfg.auth, TimeoutMS: cfg.timeoutMS})
+	raw, err := response(res, err, cfg.replyBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -103,14 +189,15 @@ func query(c sdk.Call) (any, error) {
 	}
 	return json.RawMessage(raw), nil
 }
-func response(res sdk.HTTPResult, err error) ([]byte, error) {
+
+func response(res sdk.HTTPResult, err error, limit int) ([]byte, error) {
 	var op *sdk.OperationError
 	_, denied := sdk.AsDenied(err)
 	if denied || errors.As(err, &op) && op.Status == "denied" {
-		return nil, hostError(err)
+		return nil, hostError(err, res)
 	}
 	if err != nil && (res.Status == 0 || res.Status == 200) {
-		return nil, hostError(err)
+		return nil, hostError(err, res)
 	}
 	if res.Status != 200 {
 		reason := "JEV_REQUEST_REFUSED"
@@ -122,17 +209,24 @@ func response(res sdk.HTTPResult, err error) ([]byte, error) {
 		case res.Status >= 500:
 			reason = "JEV_UNAVAILABLE"
 		case res.Status == 0:
-			reason = "JEV_TRANSPORT_FAILED"
+			return nil, transportFailure(res)
 		}
-		return nil, sdk.Fail(reason, fmt.Sprintf("Jev HTTP status %d; no answers accepted and no retry made", res.Status))
+		msg := fmt.Sprintf(statusRefused, res.Status)
+		switch {
+		case res.RetryAfterS != nil:
+			msg += fmt.Sprintf(retryAfter, *res.RetryAfterS)
+		case res.Status == 429:
+			msg += noRetryAfter
+		}
+		return nil, sdk.Fail(reason, msg)
 	}
 	raw := []byte(res.Body)
 
 	if s, ok := text(raw); ok {
 		raw = []byte(s)
 	}
-	if len(raw) > maxResultBytes {
-		return nil, sdk.Fail("JEV_RESULT_TOO_LARGE", "Reply exceeds 16 KiB; submit fewer questions or shorter option descriptions")
+	if len(raw) > limit {
+		return nil, sdk.Fail("JEV_RESULT_TOO_LARGE", fmt.Sprintf(replyTooLarge, limit))
 	}
 	if sdk.ValidateStrict(raw) != nil || object(raw) == nil {
 		return nil, sdk.Fail("JEV_RESPONSE_INVALID", "Jev reply must be a strict JSON object")
@@ -143,12 +237,12 @@ func models(c sdk.Call) (any, error) {
 	if err := allowed(object(c.Args()), nil, true, ""); err != nil {
 		return nil, err
 	}
-	handle, _, err := settings()
+	cfg, err := settings()
 	if err != nil {
 		return nil, err
 	}
-	res, err := sdk.HTTP.Get(modelsURL, &sdk.HTTPOptions{AuthProfile: handle, TimeoutMS: requestTimeoutMS})
-	raw, err := response(res, err)
+	res, err := sdk.HTTP.Get(cfg.models, &sdk.HTTPOptions{AuthProfile: cfg.auth, TimeoutMS: cfg.timeoutMS})
+	raw, err := response(res, err, cfg.replyBytes)
 	if err != nil {
 		return nil, err
 	}

@@ -1,18 +1,19 @@
 {
   "id": "id.aiii.jev",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "aiios_min_version": "0.1.10",
   "plugin_family": "tool_bridge",
   "publisher": "AI Identity Incorporated",
   "title": "Generic Jev",
-  "description": "Ask focused Jev questions about supplied evidence and receive full typed answers for your own reasoning.",
+  "description": "Ask focused questions about supplied evidence of a Jev-wire judge, TypeSafe's hosted Jev or one the operator runs on their own network, and receive full typed answers for your own reasoning.",
   "license": "Apache-2.0",
   "interface": {
     "id": "id.aiii.jev.core",
     "version": 1
   },
   "capability_envelope": [
-    "net.outbound:api.typesafe.ai:443"
+    "net.outbound:api.typesafe.ai:443",
+    "net.local"
   ],
   "variants": [
     {
@@ -23,7 +24,8 @@
       "execution_runtime": "wasm_component",
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
-        "net.outbound:api.typesafe.ai:443"
+        "net.outbound:api.typesafe.ai:443",
+        "net.local"
       ]
     },
     {
@@ -34,7 +36,8 @@
       "execution_runtime": "wasm_component",
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
-        "net.outbound:api.typesafe.ai:443"
+        "net.outbound:api.typesafe.ai:443",
+        "net.local"
       ]
     },
     {
@@ -45,7 +48,8 @@
       "execution_runtime": "wasm_component",
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
-        "net.outbound:api.typesafe.ai:443"
+        "net.outbound:api.typesafe.ai:443",
+        "net.local"
       ]
     },
     {
@@ -56,7 +60,8 @@
       "execution_runtime": "wasm_component",
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
-        "net.outbound:api.typesafe.ai:443"
+        "net.outbound:api.typesafe.ai:443",
+        "net.local"
       ]
     }
   ],
@@ -65,16 +70,55 @@
       "key": "api_key",
       "type": "secret",
       "title": "Jev API key",
-      "description": "Kept by AII OS and sent only to api.typesafe.ai",
-      "required": true
+      "description": "For the hosted judge: kept by AII OS and sent only to api.typesafe.ai. A local judge is sent no key"
     },
     {
       "key": "model",
       "type": "string",
-      "title": "Jev model",
+      "title": "Model",
       "description": "Select a model or enter a versioned model ID to pin an evaluation",
       "default": "jev-latest",
       "choices_from": "models"
+    },
+    {
+      "key": "backend",
+      "type": "enum",
+      "title": "Judge",
+      "description": "where state and questions are sent: TypeSafe's hosted Jev, or a judge you run on your own network that speaks Jev's wire",
+      "values": [
+        "jev",
+        "local"
+      ],
+      "labels": {
+        "jev": "TypeSafe's hosted Jev",
+        "local": "A judge on your own network"
+      },
+      "default": "jev"
+    },
+    {
+      "key": "local_url",
+      "type": "string",
+      "title": "Local judge address",
+      "description": "For the local judge: its base address, http://<host>:<port>, under which it answers /v1/systemone and /v1/models; grant that address to this plugin as a local network address",
+      "default": ""
+    },
+    {
+      "key": "timeout_ms",
+      "type": "integer",
+      "title": "Call timeout, ms",
+      "description": "How long one call waits for the judge's answer; keep it inside the host's limit on one call",
+      "default": 10000,
+      "minimum": 1000,
+      "maximum": 85000
+    },
+    {
+      "key": "max_reply_bytes",
+      "type": "integer",
+      "title": "Reply cap, bytes",
+      "description": "The largest reply accepted; a larger one is refused whole. The host's prompt.max_tool_result_chars must be at least this plus 3,616 (20,000 for the default)",
+      "default": 16384,
+      "minimum": 1024,
+      "maximum": 65536
     }
   ],
   "homepage": "https://github.com/aiii-dot-id/aiios-jev-plugin"

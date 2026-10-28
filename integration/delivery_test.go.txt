@@ -15,7 +15,7 @@ func TestGenericJevDeliveryBound(t *testing.T) {
 	for _, limit := range []int{20000, 32000} {
 		client := &scriptLLM{script: []llm.Response{resp("", toolCall("j1", "pl_id_aiii_jev_query", `{}`)), textResp("done")}}
 		tr := &fakeTranscript{limit: 20000}
-		loop := New(client, &fakeTools{results: map[string]string{"pl_id_aiii_jev_query": full}}, &fakeDefs{}, tr, nil, Config{MaxToolResultChars: limit})
+		loop := New(client, &fakeTools{results: map[string]string{"pl_id_aiii_jev_query": full}}, &fakeDefs{}, tr, nil, testBounds(Config{MaxToolResultChars: limit}))
 		if _, err := loop.Run(t.Context(), "system", []llm.Message{{Role: "user", Content: "evaluate"}}); err != nil {
 			t.Fatal(err)
 		}

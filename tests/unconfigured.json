@@ -14,5 +14,5 @@
     "status": "failed",
     "reason_code": "JEV_UNCONFIGURED"
   },
-  "unconfirmed_by_design": "A query evaluates explicitly supplied evidence using the already-granted Jev service; the identity may ask without a separate operator confirmation for each judgment."
+  "unconfirmed_by_design": "A query sends explicitly supplied evidence to the judge the operator configured and granted: TypeSafe's hosted Jev at api.typesafe.ai, or a local judge on the operator's network; the identity may ask without a separate operator confirmation for each judgment."
 }

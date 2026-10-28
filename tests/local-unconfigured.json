@@ -1,0 +1,20 @@
+{
+  "name": "local unconfigured",
+  "operation": "query",
+  "arguments": {
+    "state": "x",
+    "questions": {
+      "q": {
+        "type": "noul",
+        "instructions": "Is x present?"
+      }
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "reason_code": "JEV_UNCONFIGURED"
+  },
+  "settings": {
+    "backend": "local"
+  }
+}

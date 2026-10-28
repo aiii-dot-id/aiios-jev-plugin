@@ -161,9 +161,6 @@ func TestGenericJevRealBroker(t *testing.T) {
 	if err != nil || card.Effects != "write.external" {
 		t.Fatalf("descriptor: %+v %v", card, err)
 	}
-	if _, err = reg.Offer(name); err != nil {
-		t.Fatal(err)
-	}
 	var args map[string]interface{}
 	if err = json.Unmarshal([]byte(`{"state":"evidence","questions":{"n":{"type":"noul","instructions":"Is it supported?"},"c":{"type":"choice","instructions":"Choose","criteria":{"a":null,"b":null}},"s":{"type":"score","instructions":"Rate","criteria":["none","some","all"]}}}`), &args); err != nil {
 		t.Fatal(err)

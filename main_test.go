@@ -24,7 +24,7 @@ func TestMixedQuestionsAndLosslessReply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(mixedReply)}, nil)
+	raw, err := response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(mixedReply)}, nil, defaultReplyBytes)
 	if err != nil || string(raw) != mixedReply {
 		t.Fatalf("reply changed: %v %s", err, raw)
 	}
@@ -32,7 +32,7 @@ func TestMixedQuestionsAndLosslessReply(t *testing.T) {
 		t.Fatal(err)
 	}
 	quoted, _ := json.Marshal(mixedReply)
-	raw, err = response(sdk.HTTPResult{Status: 200, Body: quoted}, nil)
+	raw, err = response(sdk.HTTPResult{Status: 200, Body: quoted}, nil, defaultReplyBytes)
 	if err != nil || string(raw) != mixedReply {
 		t.Fatal("JSON text response lost", err)
 	}
@@ -66,17 +66,17 @@ func TestMalformedAnswerNeverBecomesSuccess(t *testing.T) {
 	}
 }
 func TestHTTPFailuresPreserveMeaning(t *testing.T) {
-	for code, want := range map[int]string{0: "JEV_TRANSPORT_FAILED", 401: "JEV_ACCESS_REFUSED", 403: "JEV_ACCESS_REFUSED", 422: "JEV_REQUEST_REFUSED", 429: "JEV_RATE_LIMITED", 529: "JEV_UNAVAILABLE"} {
-		_, err := response(sdk.HTTPResult{Status: code}, nil)
+	for code, want := range map[int]string{0: "JEV_TRANSPORT_UNKNOWN", 401: "JEV_ACCESS_REFUSED", 403: "JEV_ACCESS_REFUSED", 422: "JEV_REQUEST_REFUSED", 429: "JEV_RATE_LIMITED", 529: "JEV_UNAVAILABLE"} {
+		_, err := response(sdk.HTTPResult{Status: code}, nil, defaultReplyBytes)
 		reason(t, err, want)
 	}
-	_, err := response(sdk.HTTPResult{}, sdk.Deny("NET_AUTH_PROFILE_NOT_ADMITTED", "no grant"))
+	_, err := response(sdk.HTTPResult{}, sdk.Deny("NET_AUTH_PROFILE_NOT_ADMITTED", "no grant"), defaultReplyBytes)
 	reason(t, err, "NET_AUTH_PROFILE_NOT_ADMITTED")
-	_, err = response(sdk.HTTPResult{}, sdk.Fail("NET_EFFECT_UNKNOWN", "lost"))
+	_, err = response(sdk.HTTPResult{}, sdk.Fail("NET_EFFECT_UNKNOWN", "lost"), defaultReplyBytes)
 	reason(t, err, "NET_EFFECT_UNKNOWN")
-	_, err = response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(mixedReply)}, fmt.Errorf("incomplete transport"))
-	reason(t, err, "JEV_TRANSPORT_FAILED")
-	_, err = response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(strings.Repeat(" ", maxResultBytes+1))}, nil)
+	_, err = response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(mixedReply), Effect: "performed"}, fmt.Errorf("incomplete transport"), defaultReplyBytes)
+	reason(t, err, "JEV_TRANSPORT_UNKNOWN")
+	_, err = response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(strings.Repeat(" ", defaultReplyBytes+1))}, nil, defaultReplyBytes)
 	reason(t, err, "JEV_RESULT_TOO_LARGE")
 }
 func TestModelsRefuseIncompleteLists(t *testing.T) {

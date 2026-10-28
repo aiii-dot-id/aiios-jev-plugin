@@ -12,7 +12,7 @@
         "object",
         "array"
       ],
-      "description": "Relevant evidence to send to TypeSafe; do not include credentials or unrelated context."
+      "description": "Relevant evidence, sent to the judge the operator set (TypeSafe's hosted Jev or a local judge); do not include credentials or unrelated context."
     },
     "questions": {
       "type": "object",

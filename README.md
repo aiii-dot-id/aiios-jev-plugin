@@ -3,13 +3,16 @@
 [Source repository](https://github.com/aiii-dot-id/aiios-jev-plugin)
 
 `id.aiii.jev` is an AII OS tool plugin. The identity supplies context and focused
-questions, receives Jev's answers, and decides what follows.
+questions, receives Jev's answers, and decides what follows. The judge is the one
+the operator sets: TypeSafe's hosted Jev, or a judge the operator runs on their own
+network that speaks Jev's wire. State and questions are sent to that judge, and only
+to it.
 
 **Packaging prerequisite:** use AII Plugin SDK 0.1.18 or newer. Verify that packaged settings preserve `choices_from` before signing.
 
 ## Operations
 
-- `query(state, questions)` makes one POST to TypeSafe with the configured model.
+- `query(state, questions)` makes one POST to the configured judge with the configured model.
   `state` is text, an object, or an array. `questions` is Jev's native named map,
   mixing `noul`, `choice`, and `score` questions. This is `write.external` under
   the host's HTTP-verb contract. It requires the normal write-capable grant.
@@ -153,20 +156,44 @@ invalid answers fail the call rather than becoming false/zero answers. No
 probabilities are normalized, rounded, or thresholded by the plugin.
 
 Requests are at most 256 KiB, the host HTTP body ceiling; this is **not** a token
-estimate. TypeSafe still enforces its context limits. Replies are at most 16 KiB,
-with a 10-second HTTP deadline. An oversized reply fails explicitly; pass fewer
-questions or shorter criteria. A smaller input does not guarantee a small reply.
+estimate. The judge still enforces its context limits. Replies are at most the reply
+cap (`max_reply_bytes`, 16 KiB unless set), with the call timeout (`timeout_ms`,
+10 seconds unless set). An oversized reply fails explicitly, naming the cap; pass
+fewer questions or shorter criteria. A smaller input does not guarantee a small reply.
 
-**Delivery requirement:** `prompt.max_tool_result_chars` must be at least 20,000
-(the host's default is 32,000). This accommodates a maximum accepted reply plus
-its host-owned wrapper. The plugin cannot inspect this host setting. Qualification
-checks both limits through the conversation loop. A host configured lower can
-truncate the result with an explicit notice; that is not complete answer delivery.
+**Delivery requirement:** `prompt.max_tool_result_chars` must be at least the reply
+cap plus 3,616 characters: 20,000 at the default cap (the host's default is 32,000).
+This accommodates a maximum accepted reply plus its host-owned wrapper. The plugin
+cannot inspect this host setting. Qualification checks the default cap through the
+conversation loop. A host configured lower can truncate the result with an explicit
+notice; that is not complete answer delivery.
 
 Host reason codes are preserved. HTTP 401/403, 429, other non-200 statuses,
-invalid replies and oversized replies have distinct failures. A transport failure
-makes no second attempt. An unknown outcome remains unknown: another invocation
-may incur another charge.
+invalid replies and oversized replies have distinct failures; when the judge says
+when to ask again (`Retry-After`), the failure says it, and a 429 that names no time
+says so. A transport failure makes no second attempt and says whether the request
+was sent, from the host's receipt:
+
+| Code | Meaning |
+|---|---|
+| `JEV_TRANSPORT_NOT_SENT` | nothing reached the judge; nothing was answered or charged, and asking again is safe |
+| `JEV_TRANSPORT_UNKNOWN` | the request was sent, or is not known to be unsent, and no complete answer came back; another invocation may incur another charge |
+
+**Confirmation stance.** `query` sends the supplied state and questions to the judge
+the operator configured and granted, without a separate operator confirmation for
+each call: the operator's consent is the judge's settings and grants on the plugin's
+card. The case `tests/unconfigured.json` marks it `unconfirmed_by_design`.
+
+### Settings
+
+| Setting | Default | Range | What it sets |
+|---|---|---|---|
+| `api_key` | — | a credential | Jev's key, for the hosted judge |
+| `model` | `jev-latest` | the judge's list, or a versioned ID | the model every request names |
+| `backend` | `jev` | `jev`, `local` | where state and questions are sent |
+| `local_url` | empty | an http(s) address | the local judge's base address, `http://<host>:<port>`; it answers `/v1/systemone` and `/v1/models`; grant it to the plugin as a local network address (`net.local`). It is sent no key |
+| `timeout_ms` | 10000 | 1000–85000 | how long one call waits |
+| `max_reply_bytes` | 16384 | 1024–65536 | the largest reply accepted |
 
 ## Setup and release boundary
 
@@ -181,7 +208,7 @@ go vet ./...
 go test -race ./...
 aiisdk build
 aiisdk package
-python3 scripts/check_package_settings.py dist/pkg/id.aiii.jev-0.1.2
+python3 scripts/check_package_settings.py dist/pkg/id.aiii.jev-0.1.3
 aiisdk test -skip-build
 ```
 
@@ -228,7 +255,7 @@ After packaging, the integration fixtures require AII OS source with its complet
 
 ```sh
 AII_OS_DIR=/path/to/aii-os \
-JEV_STAGE="$PWD/dist/pkg/id.aiii.jev-0.1.2" ./integration/run.sh
+JEV_STAGE="$PWD/dist/pkg/id.aiii.jev-0.1.3" ./integration/run.sh
 ```
 
 The script accepts absolute or caller-relative `AII_OS_DIR` and `JEV_STAGE`
@@ -244,6 +271,20 @@ It exercises mixed answers, model discovery, malformed/oversized/rate-limited
 responses, denied grants, SAFE, cancellation and receipts. A separate
 conversation-loop check verifies complete delivery to the next model request.
 This proves local integration, not live TypeSafe accuracy or a production release.
+
+## The gate
+
+`scripts/gate.sh` runs every check this repository owns on the candidate's own bytes,
+in order: format, vet, unit tests, script tests, build and package, the settings
+guard, the worker oracle's cases and confirmation check (`aiisdk test`, with no
+network grant), and the integration proof above. It passes only when every step ran
+and passed. With `AII_OS_DIR` (a host source checkout) or `AII_OS_BIN` (the release's
+worker and verifier) unset, or a tool missing, it ends `INCOMPLETE` (exit 3) before
+running anything, naming what is missing; it never skips a step.
+
+```sh
+AII_OS_DIR=/path/to/aii-os AII_OS_BIN=/path/to/aii-os-release ./scripts/gate.sh
+```
 
 ## Ownership and boundaries
 
