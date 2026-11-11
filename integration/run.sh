@@ -29,4 +29,4 @@ replacements = {
 out.write_text(json.dumps({'Replace': replacements}), encoding='utf-8')
 PY
 cd "$AII_OS_DIR"
-go test -race -overlay "$run/overlay.json" ./internal/pluginhost ./internal/conversation -run '^TestGenericJev' -count=1 -v
+GOWORK=off go test -race -overlay "$run/overlay.json" ./internal/pluginhost ./internal/conversation -run '^TestGenericJev' -count=1 -v

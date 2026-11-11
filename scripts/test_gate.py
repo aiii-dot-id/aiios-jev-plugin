@@ -20,7 +20,7 @@ class GateTests(unittest.TestCase):
         self.calls = self.root / "calls"
         for tool in ("go", "tinygo", "python3"):
             fake = self.bin / tool
-            fake.write_text("#!/bin/sh\necho %s >> '%s'\nexit 0\n" % (tool, self.calls))
+            fake.write_text("#!/bin/sh\necho %s \"$*\" >> '%s'\nexit 0\n" % (tool, self.calls))
             fake.chmod(0o755)
 
     def run_gate(self, **env):
@@ -48,6 +48,15 @@ class GateTests(unittest.TestCase):
         result = self.run_gate(AII_OS_DIR=str(self.root), AII_OS_BIN=str(self.bin))
         self.assertEqual(result.returncode, 3, result.stderr)
         self.assertIn("tinygo", result.stderr)
+
+    def test_the_module_inputs_are_recorded_first(self):
+        result = self.run_gate(AII_OS_DIR=str(self.root), AII_OS_BIN=str(self.bin))
+        calls = self.calls.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(calls[0], "go env GOWORK", calls)
+        self.assertTrue(calls[1].startswith("go list -m -f ") and calls[1].endswith(" all"), calls)
+        self.assertIn("gate: module inputs", result.stderr)
+        self.assertIn("gate: GOWORK=off", result.stderr)
+        self.assertLess(result.stderr.index("gate: module inputs"), result.stderr.index("gate: format"))
 
 
 if __name__ == "__main__":

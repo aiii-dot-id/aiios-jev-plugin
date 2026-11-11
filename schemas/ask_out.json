@@ -1,0 +1,36 @@
+{
+  "type": "object",
+  "required": [
+    "judge"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "judge": {
+      "type": "string"
+    },
+    "model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "answers": {
+      "type": "object"
+    },
+    "rows": {
+      "type": "array"
+    },
+    "sent": {
+      "type": "object"
+    },
+    "usage": {
+      "type": "object"
+    },
+    "next": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  }
+}

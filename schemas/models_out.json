@@ -1,9 +1,13 @@
 {
   "type": "object",
   "required": [
+    "judge",
     "choices"
   ],
   "properties": {
+    "judge": {
+      "type": "string"
+    },
     "choices": {
       "type": "array",
       "minItems": 1,
@@ -15,6 +19,9 @@
         ],
         "properties": {
           "value": {
+            "type": "string"
+          },
+          "label": {
             "type": "string"
           }
         },

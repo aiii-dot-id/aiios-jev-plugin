@@ -1,19 +1,20 @@
 {
   "id": "id.aiii.jev",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "aiios_min_version": "0.1.10",
   "plugin_family": "tool_bridge",
   "publisher": "AI Identity Incorporated",
   "title": "Generic Jev",
-  "description": "Ask focused questions about supplied evidence of a Jev-wire judge, TypeSafe's hosted Jev or one the operator runs on their own network, and receive full typed answers for your own reasoning.",
+  "description": "Ask a calibrated judge typed questions about evidence, files, or each of many items: TypeSafe's hosted Jev, or a judge you run on your own network that speaks its wire. A file the identity names is sent to that judge without the identity reading it; grant files only if that may happen, and until you do every file reference is refused and everything else works. Asking is a write to the judge, so a read-only grant turns asking off.",
   "license": "Apache-2.0",
   "interface": {
     "id": "id.aiii.jev.core",
-    "version": 1
+    "version": 2
   },
   "capability_envelope": [
     "net.outbound:api.typesafe.ai:443",
-    "net.local"
+    "net.local",
+    "fs.sandbox"
   ],
   "variants": [
     {
@@ -25,7 +26,8 @@
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
         "net.outbound:api.typesafe.ai:443",
-        "net.local"
+        "net.local",
+        "fs.sandbox"
       ]
     },
     {
@@ -37,7 +39,8 @@
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
         "net.outbound:api.typesafe.ai:443",
-        "net.local"
+        "net.local",
+        "fs.sandbox"
       ]
     },
     {
@@ -49,7 +52,8 @@
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
         "net.outbound:api.typesafe.ai:443",
-        "net.local"
+        "net.local",
+        "fs.sandbox"
       ]
     },
     {
@@ -61,7 +65,8 @@
       "admission_profile": "wasm_sandbox",
       "variant_capabilities": [
         "net.outbound:api.typesafe.ai:443",
-        "net.local"
+        "net.local",
+        "fs.sandbox"
       ]
     }
   ],
@@ -84,7 +89,7 @@
       "key": "backend",
       "type": "enum",
       "title": "Judge",
-      "description": "where state and questions are sent: TypeSafe's hosted Jev, or a judge you run on your own network that speaks Jev's wire",
+      "description": "where state, questions and the files they name are sent: TypeSafe's hosted Jev, or a judge you run on your own network that speaks Jev's wire",
       "values": [
         "jev",
         "local"
@@ -106,19 +111,19 @@
       "key": "timeout_ms",
       "type": "integer",
       "title": "Call timeout, ms",
-      "description": "How long one call waits for the judge's answer; keep it inside the host's limit on one call",
+      "description": "How long one call waits for the judge's answer, at most 60 seconds, the host's limit on one call",
       "default": 10000,
       "minimum": 1000,
-      "maximum": 85000
+      "maximum": 60000
     },
     {
       "key": "max_reply_bytes",
       "type": "integer",
-      "title": "Reply cap, bytes",
-      "description": "The largest reply accepted; a larger one is refused whole. The host's prompt.max_tool_result_chars must be at least this plus 3,616 (20,000 for the default)",
+      "title": "Reply budget, bytes",
+      "description": "The most a reply may be: each call sends only the items whose answers fit it, and refuses unsent a question set whose answers could not. prompt.max_tool_result_chars must be at least this plus 3,616",
       "default": 16384,
       "minimum": 1024,
-      "maximum": 65536
+      "maximum": 28384
     }
   ],
   "homepage": "https://github.com/aiii-dot-id/aiios-jev-plugin"

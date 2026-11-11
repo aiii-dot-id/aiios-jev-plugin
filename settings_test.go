@@ -29,11 +29,11 @@ func code(err error) string {
 
 func TestOneWireTwoAddresses(t *testing.T) {
 	c, err := configFrom(values{"api_key": "jev"})
-	if err != nil || c.systemOne != "https://api.typesafe.ai/v1/systemone" || c.models != "https://api.typesafe.ai/v1/models" || c.auth != "jev" {
+	if err != nil || c.systemOne != "https://api.typesafe.ai/v1/systemone" || c.models != "https://api.typesafe.ai/v1/models" || c.auth != "jev" || c.judge != "api.typesafe.ai" {
 		t.Fatalf("hosted: %+v %v", c, err)
 	}
 	c, err = configFrom(values{"backend": "local", "local_url": "http://judge.lan:8080/", "api_key": "jev"})
-	if err != nil || c.systemOne != "http://judge.lan:8080/v1/systemone" || c.models != "http://judge.lan:8080/v1/models" || c.auth != "" {
+	if err != nil || c.systemOne != "http://judge.lan:8080/v1/systemone" || c.models != "http://judge.lan:8080/v1/models" || c.auth != "" || c.judge != "judge.lan:8080" {
 		t.Fatalf("local: %+v %v", c, err)
 	}
 	if _, err := configFrom(values{}); code(err) != "JEV_UNCONFIGURED" {
@@ -43,29 +43,47 @@ func TestOneWireTwoAddresses(t *testing.T) {
 		t.Fatalf("local without an address: %v", err)
 	}
 	for _, v := range []values{{"backend": "local", "local_url": "ftp://judge.lan"}, {"backend": "local", "local_url": "http://u:p@judge:8080"},
-		{"backend": "both", "api_key": "jev"}, {"api_key": "jev", "timeout_ms": 10}, {"api_key": "jev", "max_reply_bytes": 1 << 20}} {
+		{"backend": "both", "api_key": "jev"}, {"api_key": "jev", "timeout_ms": 10}, {"api_key": "jev", "max_reply_bytes": 1 << 20},
+		{"api_key": "jev", "timeout_ms": 60001}, {"api_key": "jev", "max_reply_bytes": 28385}} {
 		if _, err := configFrom(v); code(err) != "JEV_CONFIGURATION_INVALID" {
 			t.Fatalf("%v accepted: %v", v, err)
 		}
 	}
 }
 
-func TestTheReplyCapIsASetting(t *testing.T) {
+func TestAnUpgradeKeepsEveryDestination(t *testing.T) {
+	for _, tc := range []struct {
+		v    values
+		want string
+		code string
+	}{
+		{values{"api_key": "k"}, "https://api.typesafe.ai/v1/systemone", ""},
+		{values{"api_key": "k", "backend": "jev"}, "https://api.typesafe.ai/v1/systemone", ""},
+		{values{"api_key": "k", "local_url": "http://old.lan:9000"}, "https://api.typesafe.ai/v1/systemone", ""},
+		{values{"api_key": "k", "backend": "jev", "local_url": "http://old.lan:9000"}, "https://api.typesafe.ai/v1/systemone", ""},
+		{values{"backend": "local", "local_url": "http://judge.lan:9000"}, "http://judge.lan:9000/v1/systemone", ""},
+		{values{"api_key": "k", "backend": "local", "local_url": "http://judge.lan:9000"}, "http://judge.lan:9000/v1/systemone", ""},
+		{values{"backend": "local"}, "", "JEV_UNCONFIGURED"},
+		{values{"local_url": "http://judge.lan:9000"}, "", "JEV_UNCONFIGURED"},
+	} {
+		c, err := configFrom(tc.v)
+		if code(err) != tc.code || c.systemOne != tc.want && tc.code == "" {
+			t.Errorf("%v: %s %v", tc.v, c.systemOne, err)
+		}
+	}
+}
+
+func TestTheReplyBudgetIsASetting(t *testing.T) {
 	c, _ := configFrom(values{"api_key": "jev"})
 	if c.timeoutMS != 10000 || c.replyBytes != 16384 {
 		t.Fatalf("defaults: %+v", c)
 	}
-	c, _ = configFrom(values{"api_key": "jev", "timeout_ms": 30000, "max_reply_bytes": 32768})
-	if c.timeoutMS != 30000 || c.replyBytes != 32768 {
+	c, _ = configFrom(values{"api_key": "jev", "timeout_ms": 60000, "max_reply_bytes": 28384})
+	if c.timeoutMS != 60000 || c.replyBytes != 28384 {
 		t.Fatalf("operator's values: %+v", c)
 	}
-	big := `{"model":"m","answers":{},"padding":"` + strings.Repeat("x", 20000) + `"}`
-	if _, err := response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(big)}, nil, 16384); code(err) != "JEV_RESULT_TOO_LARGE" ||
-		!strings.Contains(err.Error(), "16384") {
-		t.Fatalf("over the default cap: %v", err)
-	}
-	if raw, err := response(sdk.HTTPResult{Status: 200, Body: json.RawMessage(big)}, nil, 32768); err != nil || string(raw) != big {
-		t.Fatalf("inside a raised cap: %v", err)
+	if maxReplyBytes+replyRoom != 32000 || defaultReplyBytes+replyRoom != 20000 {
+		t.Fatalf("the budget's bounds no longer fit the host's windows: %d, %d", maxReplyBytes, defaultReplyBytes)
 	}
 }
 
@@ -81,40 +99,52 @@ func TestAFailedCallSaysWhetherItWasSent(t *testing.T) {
 		{sdk.HTTPResult{}, lost, "JEV_TRANSPORT_UNKNOWN"},
 		{sdk.HTTPResult{Status: 200, Effect: "performed"}, lost, "JEV_TRANSPORT_UNKNOWN"},
 		{sdk.HTTPResult{Effect: "not-performed"}, nil, "JEV_TRANSPORT_NOT_SENT"},
-		{sdk.HTTPResult{Effect: "not-performed"}, sdk.Fail("NET_EFFECT_UNKNOWN", "lost"), "NET_EFFECT_UNKNOWN"},
+		{sdk.HTTPResult{Effect: "not-performed"}, sdk.Fail("NET_REMOTE_OUTCOME_FAILED", "transport: refused"), "JEV_TRANSPORT_NOT_SENT"},
+		{sdk.HTTPResult{Effect: "unknown"}, sdk.Fail("NET_EFFECT_UNKNOWN", "lost"), "JEV_TRANSPORT_UNKNOWN"},
+		{sdk.HTTPResult{}, sdk.Fail("NET_EFFECT_UNKNOWN", "lost"), "NET_EFFECT_UNKNOWN"},
+		{sdk.HTTPResult{Effect: "not-performed"}, sdk.Deny("POLICY_DENY", "egress"), "POLICY_DENY"},
 	} {
-		_, err := response(tc.res, tc.err, defaultReplyBytes)
+		_, err := response(tc.res, tc.err, jevName, defaultReplyBytes, "", "")
 		if code(err) != tc.want {
 			t.Errorf("%+v %v: %v, want %s", tc.res, tc.err, err, tc.want)
 		}
 	}
-	_, err := response(sdk.HTTPResult{Effect: "not-performed"}, lost, defaultReplyBytes)
-	if !strings.Contains(err.Error(), "not sent") || !strings.Contains(err.Error(), "safe") {
+	_, err := response(sdk.HTTPResult{Effect: "not-performed"}, sdk.Fail("NET_REMOTE_OUTCOME_FAILED", "transport: refused"), jevName, defaultReplyBytes, "", "")
+	if !strings.Contains(err.Error(), "Not sent") || !strings.Contains(err.Error(), "safe") || !strings.Contains(err.Error(), "NET_REMOTE_OUTCOME_FAILED, transport: refused") {
 		t.Fatalf("not sent says so: %v", err)
 	}
-	_, err = response(sdk.HTTPResult{Effect: "unknown"}, lost, defaultReplyBytes)
-	if !strings.Contains(err.Error(), "was sent") || !strings.Contains(err.Error(), "charge again") {
+	_, err = response(sdk.HTTPResult{Effect: "unknown"}, lost, jevName, defaultReplyBytes, "", "")
+	if !strings.Contains(err.Error(), "may have been charged") || !strings.Contains(err.Error(), "charged again") {
 		t.Fatalf("sent says so: %v", err)
+	}
+	_, err = response(sdk.HTTPResult{Effect: "unknown"}, lost, jevName, defaultReplyBytes, "", againItems)
+	if !strings.Contains(err.Error(), "the same from asks these items again") {
+		t.Fatalf("items say what asking again does: %v", err)
 	}
 }
 
 func TestARefusalCarriesTheRetryTime(t *testing.T) {
 	thirty, five := int64(30), int64(5)
-	_, err := response(sdk.HTTPResult{Status: 429, RetryAfterS: &thirty}, nil, defaultReplyBytes)
-	if code(err) != "JEV_RATE_LIMITED" || !strings.Contains(err.Error(), "30 seconds") {
+	_, err := response(sdk.HTTPResult{Status: 429, RetryAfterS: &thirty}, nil, jevName, defaultReplyBytes, "", "")
+	if code(err) != "JEV_RATE_LIMITED" || !strings.Contains(err.Error(), "retry_after_s: 30") {
 		t.Fatalf("429 with a time: %v", err)
 	}
-	_, err = response(sdk.HTTPResult{Status: 429}, nil, defaultReplyBytes)
+	_, err = response(sdk.HTTPResult{Status: 429}, nil, jevName, defaultReplyBytes, "", "")
 	if code(err) != "JEV_RATE_LIMITED" || !strings.Contains(err.Error(), "no time to wait") {
 		t.Fatalf("429 without a time: %v", err)
 	}
-	_, err = response(sdk.HTTPResult{Status: 503, RetryAfterS: &five}, nil, defaultReplyBytes)
-	if code(err) != "JEV_UNAVAILABLE" || !strings.Contains(err.Error(), "5 seconds") {
+	_, err = response(sdk.HTTPResult{Status: 503, RetryAfterS: &five}, nil, jevName, defaultReplyBytes, "", "")
+	if code(err) != "JEV_UNAVAILABLE" || !strings.Contains(err.Error(), "retry_after_s: 5") {
 		t.Fatalf("503 with a time: %v", err)
 	}
 }
 
 type manifest struct {
+	Version   string `json:"version"`
+	Interface struct {
+		ID      string `json:"id"`
+		Version int    `json:"version"`
+	} `json:"interface"`
 	Envelope []string `json:"capability_envelope"`
 	Variants []struct {
 		Caps []string `json:"variant_capabilities"`
@@ -130,6 +160,9 @@ func TestThePackageDeclaresWhatTheCodeReads(t *testing.T) {
 	var m manifest
 	if err := json.Unmarshal(b, &m); err != nil {
 		t.Fatal(err)
+	}
+	if m.Version != "0.2.0" || m.Interface.ID != "id.aiii.jev.core" || m.Interface.Version != 2 {
+		t.Fatalf("version %s, interface %+v", m.Version, m.Interface)
 	}
 	if err := aiiospkg.ValidateSettings(m.Settings); err != nil {
 		t.Fatal(err)
@@ -159,22 +192,54 @@ func TestThePackageDeclaresWhatTheCodeReads(t *testing.T) {
 		}
 		return false
 	}
-	if !has(m.Envelope, netLocal) || !has(m.Envelope, jevHost) {
-		t.Fatalf("envelope: %v", m.Envelope)
-	}
-	for _, v := range m.Variants {
-		if !has(v.Caps, netLocal) {
-			t.Fatalf("variant: %v", v.Caps)
+	for _, c := range []string{jevHost, netLocal, fsSandbox} {
+		if !has(m.Envelope, c) {
+			t.Fatalf("envelope: %v", m.Envelope)
+		}
+		for _, v := range m.Variants {
+			if !has(v.Caps, c) {
+				t.Fatalf("variant: %v", v.Caps)
+			}
 		}
 	}
 }
 
-func TestTheQuerySaysWhereItsTextGoes(t *testing.T) {
-	if len(querySummary) > 256 || !strings.Contains(querySummary, "sent to") || !strings.Contains(querySummary, "api.typesafe.ai") && !strings.Contains(querySummary, "TypeSafe") || !strings.Contains(querySummary, "operator's network") {
-		t.Fatalf("%d bytes: %q", len(querySummary), querySummary)
+func TestTheWordsAreTheApprovedWords(t *testing.T) {
+	for _, w := range []struct {
+		text  string
+		bytes int
+	}{{askSummary, 235}, {stateWords, 227}, {questionsWords, 251}, {instructionsWords, 200}, {criteriaWords, 200}, {itemsWords, 192}, {rankWords, 158}, {longContextWords, 142}, {fromWords, 161}} {
+		if len(w.text) != w.bytes {
+			t.Errorf("%d bytes, approved at %d: %q", len(w.text), w.bytes, w.text)
+		}
 	}
 	if len(modelsSummary) > 256 {
 		t.Fatal(modelsSummary)
+	}
+	type described struct {
+		Description string `json:"description"`
+	}
+	var schema struct {
+		Properties map[string]struct {
+			Description string `json:"description"`
+			Items       struct {
+				Properties map[string]described `json:"properties"`
+			} `json:"items"`
+		} `json:"properties"`
+	}
+	b, err := os.ReadFile("schemas/ask_in.json")
+	if err != nil || json.Unmarshal(b, &schema) != nil {
+		t.Fatalf("schema: %v", err)
+	}
+	for k, want := range map[string]string{"state": stateWords, "questions": questionsWords, "items": itemsWords, "rank": rankWords, "long_context": longContextWords, "from": fromWords} {
+		if got := schema.Properties[k].Description; got != want {
+			t.Errorf("%s: the schema says %q", k, got)
+		}
+	}
+	for k, want := range map[string]string{"instructions": instructionsWords, "criteria": criteriaWords} {
+		if got := schema.Properties["questions"].Items.Properties[k].Description; got != want {
+			t.Errorf("questions' %s: the schema says %q", k, got)
+		}
 	}
 	files, _ := filepath.Glob("tests/*.json")
 	stance := ""
@@ -187,11 +252,11 @@ func TestTheQuerySaysWhereItsTextGoes(t *testing.T) {
 		if err := json.Unmarshal(b, &c); err != nil {
 			t.Fatal(err)
 		}
-		if c.Operation == "query" && c.Why != "" {
+		if c.Operation == "ask" && c.Why != "" {
 			stance = c.Why
 		}
 	}
-	if !strings.Contains(stance, "api.typesafe.ai") || !strings.Contains(stance, "local") {
+	if !strings.Contains(stance, "api.typesafe.ai") || !strings.Contains(stance, "local") || !strings.Contains(stance, "files") {
 		t.Fatalf("stance: %q", stance)
 	}
 }
@@ -205,7 +270,7 @@ func TestALocalJudgeAddressIsHeldToItsShape(t *testing.T) {
 		"judge.lan:8080":                     "",
 		"http://judge.lan/#x":                "",
 	} {
-		if got, why := localBase(raw); got != want || (want == "") != (why != "") {
+		if got, _, why := localBase(raw); got != want || (want == "") != (why != "") {
 			t.Errorf("%q: %q %q", raw, got, why)
 		}
 	}

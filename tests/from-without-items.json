@@ -1,0 +1,22 @@
+{
+  "name": "from without items",
+  "operation": "ask",
+  "arguments": {
+    "state": "x",
+    "questions": [
+      {
+        "id": "q",
+        "instructions": "Is x present?"
+      }
+    ],
+    "from": {
+      "after": null,
+      "model": null,
+      "screen": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "expect": {
+    "status": "failed",
+    "reason_code": "OPERATION_ARGUMENT_INVALID"
+  }
+}

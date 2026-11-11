@@ -1,14 +1,15 @@
 {
   "name": "bad-type",
-  "operation": "query",
+  "operation": "ask",
   "arguments": {
     "state": "x",
-    "questions": {
-      "q": {
+    "questions": [
+      {
+        "id": "q",
         "type": "chat",
         "instructions": "write"
       }
-    }
+    ]
   },
   "expect": {
     "status": "failed",

@@ -1,0 +1,209 @@
+{
+  "type": "object",
+  "required": [
+    "state",
+    "questions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "state": {
+      "type": [
+        "string",
+        "object",
+        "array"
+      ],
+      "properties": {
+        "$file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "What every question needs: the evidence, the goal, the rule. Send only what the questions need. A file you name goes to the judge unread by you: name only what may go there. Text you did not write can steer the answer about it."
+    },
+    "questions": {
+      "type": [
+        "array",
+        "object"
+      ],
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "instructions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "type": {
+            "enum": [
+              "noul",
+              "choice",
+              "score",
+              "box"
+            ]
+          },
+          "instructions": {
+            "type": [
+              "string",
+              "object",
+              "array"
+            ],
+            "properties": {
+              "$file": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "description": "Name what to judge: the part of state in backticks (`ticket.text`), or `item`. Phrase it so a true answer is yes; one condition, no 'or'. No counting, arithmetic or date comparison: do those yourself."
+          },
+          "criteria": {
+            "type": [
+              "object",
+              "array"
+            ],
+            "description": "choice: option names that say what they mean, each with a description. score: levels lowest first, each a situation on its own. noul (optional): true and false, each a concrete situation, not 'not X'."
+          }
+        }
+      },
+      "properties": {
+        "$file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "$file"
+      ],
+      "additionalProperties": false,
+      "description": "Each one judgment a person could make at a glance, literal and complete: Jev answers exactly what is written. A question without a type is a yes/no question. Pair a choice or a box with a noul asking whether anything fits. Or name a file of questions."
+    },
+    "items": {
+      "type": [
+        "array",
+        "object"
+      ],
+      "minItems": 1,
+      "items": {
+        "properties": {
+          "$file": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "properties": {
+        "$files": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "$files"
+      ],
+      "additionalProperties": false,
+      "description": "Things to ask the same questions about, each placed into each question; one row per item comes back, so you need not read them. An item can steer its own answer: read one before you act on it."
+    },
+    "rank": {
+      "type": "string",
+      "minLength": 1,
+      "description": "With items: order rows by this question, highest first: a noul's yes, a choice's top option or `id.option`, a score's level. Without it, rows keep item order."
+    },
+    "long_context": {
+      "type": "boolean",
+      "description": "Use Jev's long context (262k tokens; slower and less accurate). Set it only when a reply said the request was too long for the default limits."
+    },
+    "from": {
+      "type": "object",
+      "required": [
+        "after",
+        "model",
+        "screen"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": [
+            "null",
+            "string",
+            "integer"
+          ],
+          "minimum": 0
+        },
+        "model": {
+          "type": [
+            "null",
+            "string"
+          ]
+        },
+        "screen": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "description": "With items: a reply's next, passed back whole. It continues the same screen with the same model, and is refused if the state, the questions or the items changed."
+    }
+  },
+  "examples": [
+    {
+      "state": {
+        "ticket": {
+          "$file": "inbox/0017.eml"
+        },
+        "policy": "Refunds within 30 days of purchase."
+      },
+      "questions": [
+        {
+          "id": "covered",
+          "instructions": "Does `ticket` ask for something `policy` covers?"
+        },
+        {
+          "id": "route",
+          "type": "choice",
+          "instructions": "Which action does `ticket` ask for?",
+          "criteria": {
+            "refund": "money back",
+            "rebook": "a new date",
+            "info": "a question only"
+          }
+        },
+        {
+          "id": "urgency",
+          "type": "score",
+          "instructions": "How soon does `ticket` need an answer?",
+          "criteria": [
+            "no date is named",
+            "within a week",
+            "today"
+          ]
+        }
+      ]
+    },
+    {
+      "state": "A ticket asks for a refund when it wants money back for a purchase.",
+      "questions": [
+        {
+          "id": "refund",
+          "instructions": "Does `item` ask for money back?"
+        },
+        {
+          "id": "route",
+          "type": "choice",
+          "instructions": "Which action does `item` ask for?",
+          "criteria": {
+            "refund": "money back",
+            "rebook": "a new date",
+            "info": "a question only"
+          }
+        }
+      ],
+      "items": {
+        "$files": "inbox/*.eml"
+      },
+      "rank": "route.refund"
+    }
+  ]
+}

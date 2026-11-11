@@ -1,14 +1,15 @@
 {
   "name": "local unconfigured",
-  "operation": "query",
+  "operation": "ask",
   "arguments": {
     "state": "x",
-    "questions": {
-      "q": {
+    "questions": [
+      {
+        "id": "q",
         "type": "noul",
         "instructions": "Is x present?"
       }
-    }
+    ]
   },
   "expect": {
     "status": "failed",

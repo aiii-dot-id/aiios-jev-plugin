@@ -18,6 +18,10 @@ cd "$root"
 step() { echo "gate: $*" >&2; }
 fail() { echo "gate: FAIL — $*" >&2; exit 1; }
 
+step "module inputs"
+work=$(go env GOWORK) || fail "go env GOWORK"
+echo "gate: GOWORK=${work:-off}" >&2
+go list -m -f '{{.Path}} {{.Version}}{{with .Replace}} => {{.Path}} {{.Version}}{{end}} {{.Dir}}' all >&2 || fail "go list -m all"
 step "format"
 drift=$(gofmt -l .)
 [ -z "$drift" ] || fail "gofmt drift in: $drift"
